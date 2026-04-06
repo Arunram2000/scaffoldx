@@ -31,7 +31,8 @@
     "commander": "^12.1.0",
     "degit": "^2.8.4",
     "fs-extra": "^11.2.0",
-    "inquirer": "^8.2.6"
+    "inquirer": "^8.2.6",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/fs-extra": "^11.0.4",

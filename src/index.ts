@@ -3,8 +3,8 @@ import { program } from 'commander';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { runCreate } from './commands/create';
-import { listTemplates } from './utils/listTemplates';
-import { ScaffoldxError } from './utils/errors';
+import { runList } from './commands/list';
+import { ScaffoldxError } from './engine/errors';
 
 function readVersion(): string {
   try {
@@ -50,7 +50,7 @@ async function main(): Promise<void> {
     .command('list')
     .description('List stacks and templates from the remote registry')
     .action(async () => {
-      await listTemplates();
+      await runList();
     });
 
   try {

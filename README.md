@@ -1,89 +1,14 @@
 # scaffoldx
 
-Production-style Node.js CLI for scaffolding projects from templates hosted on Git. Template definitions are loaded from a **remote JSON registry** so you can add or change templates without shipping a new CLI release.
+`scaffoldx` is a metadata-driven Node.js TypeScript CLI that scaffolds projects from template repositories.
 
-## Requirements
+No template names, prompt keys, or placeholder keys are hardcoded in CLI code. Everything is read dynamically from:
 
-- Node.js **18+** (uses global `fetch`)
+- remote registry JSON
+- `template.json`
+- `prompts.json`
 
 ## Install
-
-Install globally:
-
-```bash
-npm install -g scaffoldx
-```
-
-Or run on demand without a global install:
-
-```bash
-npx scaffoldx list
-```
-
-## Usage
-
-List stacks and templates from the registry:
-
-```bash
-scaffoldx list
-```
-
-Create a project (example):
-
-```bash
-scaffoldx create flutter clean-arch
-```
-
-You will be prompted for a **project name**. A new directory with that name is created in the current working directory, the template is cloned with [degit](https://github.com/Rich-Harris/degit), and the literal placeholder `**PROJECT_NAME**` is replaced in text files.
-
-## Template registry
-
-The CLI downloads JSON shaped as **stack → template slug → entry**, where each entry provides a **public Git repo** and **branch**. [degit](https://github.com/Rich-Harris/degit) downloads that ref using `repo#branch` (for GitHub: `owner/repo#main`).
-
-```json
-{
-  "flutter": {
-    "clean-arch": {
-      "repo": "Arunram2000/flutter-clean-arch-template",
-      "branch": "main",
-      "description": "Flutter clean architecture with Riverpod"
-    }
-  },
-  "react": {
-    "admin-dashboard": {
-      "repo": "Arunram2000/react-admin-template",
-      "branch": "main",
-      "description": "React admin starter"
-    }
-  }
-}
-```
-
-- **`repo`**: `owner/repository` on GitHub (same form degit uses for public GitHub repos).
-- **`branch`**: branch name or tag (e.g. `main`, `develop`).
-- **`description`**: optional; shown in `scaffoldx list`.
-
-**Backward compatibility:** a template value may still be a plain string (e.g. `"user/repo"`); it is treated as `repo` with branch `main`.
-
-### Public vs private repos
-
-- **Public** GitHub repos work out of the box; no token is required for degit to download the archive.
-- **Private** repos need authentication (degit does not handle GitHub auth for anonymous downloads). Options: use a public template repo, or extend the CLI later (e.g. `git clone` with credentials, or a degit server that supplies a token).
-
-You do **not** need to publish anything to npm for the template repos—only the registry JSON must be reachable (e.g. raw GitHub URL), and each `repo` must exist and allow read access for whoever runs the CLI.
-
-**Default URL:** set `DEFAULT_TEMPLATES_REGISTRY_URL` in [`src/config/templates.ts`](src/config/templates.ts) to your hosted file (for example `raw.githubusercontent.com/.../templates.json`).
-
-**Override without rebuilding:** point the CLI at any HTTPS JSON URL:
-
-```bash
-export SCAFFOLDX_TEMPLATES_URL="https://example.com/templates.json"
-scaffoldx list
-```
-
-## Local development (`npm link`)
-
-From the package root:
 
 ```bash
 npm install
@@ -91,32 +16,154 @@ npm run build
 npm link
 ```
 
-Then run `scaffoldx` from any directory. While iterating on TypeScript sources:
+Now `scaffoldx` is available globally on your machine.
+
+## Local test
 
 ```bash
-npm run dev -- list
-npm run dev -- create flutter clean-arch
+scaffoldx create flutter clean-arch
 ```
 
-## Publishing to npm
+Also available:
 
-1. Update `version` in `package.json`.
-2. Set your real default registry URL in [`src/config/templates.ts`](src/config/templates.ts).
-3. Build and confirm `dist/` output:
+```bash
+scaffoldx list
+```
 
-   ```bash
-   npm run build
-   ```
+## Publish
 
-4. Ensure `package.json` has `"files": ["dist"]` and `"bin"` pointing at `dist/index.js`.
-5. Publish:
+```bash
+npm publish
+```
 
-   ```bash
-   npm publish --access public
-   ```
+## CLI behavior
 
-`prepublishOnly` runs `npm run build` automatically.
+For `scaffoldx create <stack> <template>`:
 
-## License
+1. Fetch remote registry
+2. Resolve template repo from registry
+3. Clone template repo (cached locally)
+4. Read and validate `template.json`
+5. Read and validate `prompts.json`
+6. Ask dynamic questions from `prompts.json`
+7. Copy only `template/` into current directory
+8. Replace placeholders (for every answer key)
+9. Run optional `hooks/post-create.js`
+10. Print success
 
-MIT
+## Registry JSON guide
+
+Default registry URL is set in `src/engine/registry.ts`:
+
+`https://raw.githubusercontent.com/yourorg/scaffoldx-registry/main/templates.json`
+
+Override at runtime:
+
+```bash
+export SCAFFOLDX_TEMPLATES_URL="https://raw.githubusercontent.com/yourorg/scaffoldx-registry/main/templates.json"
+```
+
+Registry format:
+
+```json
+{
+  "flutter": {
+    "clean-arch": {
+      "repo": "yourorg/scaffoldx-flutter-clean-arch-template"
+    }
+  },
+  "react": {
+    "admin-dashboard": {
+      "repo": "yourorg/scaffoldx-react-admin-dashboard-template"
+    }
+  }
+}
+```
+
+`branch` is optional in registry and defaults to `main`.
+
+## Template repo authoring guide
+
+Each template repository must be plug-and-play with this structure:
+
+```text
+template/
+template.json
+prompts.json
+hooks/post-create.js   (optional)
+```
+
+Example:
+
+```text
+scaffoldx-flutter-clean-arch-template/
+├── template/
+├── template.json
+├── prompts.json
+└── hooks/
+    └── post-create.js
+```
+
+## template.json guide
+
+```json
+{
+  "name": "clean-arch",
+  "stack": "flutter",
+  "version": "1.0.0",
+  "description": "Flutter clean architecture starter",
+  "placeholders": ["PROJECT_NAME", "API_URL"]
+}
+```
+
+Validated with zod in `src/schemas/templateSchema.ts`.
+
+## prompts.json guide
+
+```json
+{
+  "questions": [
+    {
+      "name": "PROJECT_NAME",
+      "message": "Project name?"
+    },
+    {
+      "name": "API_URL",
+      "message": "API base URL?"
+    }
+  ]
+}
+```
+
+Validated with zod in `src/schemas/promptsSchema.ts`.
+
+## Placeholder rules
+
+- Placeholder format is `**KEY**`
+- `KEY` must match prompt answer key
+- Replacements are dynamic for all returned answers
+
+Example:
+
+- `**PROJECT_NAME**` -> answer for `PROJECT_NAME`
+- `**API_URL**` -> answer for `API_URL`
+
+## Hook system guide
+
+If the template repo contains `hooks/post-create.js`, scaffoldx executes it after generation.
+
+Hook process details:
+
+- executed via Node `child_process`
+- working directory: generated project directory
+- environment variables:
+  - `SCAFFOLDX_TARGET_DIR`
+  - `SCAFFOLDX_ANSWERS_JSON`
+  - `SCAFFOLDX_TEMPLATE_NAME`
+  - `SCAFFOLDX_TEMPLATE_STACK`
+
+Use this for post-generation automation like:
+
+- `npm install`
+- `flutter pub get`
+- codegen/bootstrap tasks
